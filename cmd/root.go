@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	// homedir "github.com/mitchellh/go-homedir"
@@ -17,8 +18,37 @@ var rootCmd = &cobra.Command{
 	RunE:    imapCtrl,
 }
 
+var host string
+var port int16
+
+var tls bool
+
+var user string
+var password string
+
+var verbose bool
+
 func init() {
-	//rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().StringVar(&host, "host", "", "IMAP mail host (required)")
+	rootCmd.PersistentFlags().Int16VarP(&port, "port", "p", 993, "IMAP port")
+	rootCmd.PersistentFlags().BoolVarP(&tls, "tls", "s", true, "IMAP dial tls")
+	rootCmd.PersistentFlags().StringVarP(&user, "user", "u", "", "IMAP user name (required)")
+	rootCmd.PersistentFlags().StringVarP(&password, "password", "x", "", "IMAP user password (required)")
+
+	err := rootCmd.MarkPersistentFlagRequired("host")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = rootCmd.MarkPersistentFlagRequired("user")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = rootCmd.MarkPersistentFlagRequired("password")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 func imapCtrl(cmd *cobra.Command, args []string) error {

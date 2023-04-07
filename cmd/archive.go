@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bitbucket.org/mis79/imapctl/utl"
 	"fmt"
 	imap "github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 	"github.com/spf13/cobra"
 	"log"
+	"strconv"
+	"time"
 )
 
 var archiveCmd = &cobra.Command{
@@ -15,121 +18,135 @@ var archiveCmd = &cobra.Command{
 	RunE:  cmdArchive,
 }
 
-var host string
-var port int16
-
-var tls bool
-
-var user string
-var password string
+type ArchiveState struct {
+	Name  string
+	Count int
+	Seq   *imap.SeqSet
+}
 
 var target string
 var inbox string
 var outbox []string
 
+var targetInbox string
+var targetOutbox string
+
+var location string
+var dryrun bool
+
 func init() {
 
-	archiveCmd.Flags().StringVar(&host, "host", "", "IMAP mail host (required)")
-	archiveCmd.Flags().Int16VarP(&port, "port", "p", 993, "IMAP port")
-	archiveCmd.Flags().BoolVarP(&tls, "tls", "s", true, "IMAP dial tls")
-	archiveCmd.Flags().StringVarP(&user, "user", "u", "", "IMAP user name (required)")
-	archiveCmd.Flags().StringVarP(&password, "password", "x", "", "IMAP user password (required)")
-	archiveCmd.Flags().StringVarP(&target, "target", "t", "Archive", "The target mailbox for the archive")
+	archiveCmd.Flags().StringVarP(&target, "target", "t", "INBOX.Archive", "The target mailbox for the archive")
 	archiveCmd.Flags().StringVarP(&inbox, "inbox", "i", "INBOX", "The mailbox name of received messages")
+	// Instead we could scan for the '\Sent' flag
 	archiveCmd.Flags().StringSliceVarP(&outbox, "outbox", "o", []string{"INBOX.Sent"}, "The mailbox name of sent messages")
-
-	err := archiveCmd.MarkFlagRequired("host")
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = archiveCmd.MarkFlagRequired("user")
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = archiveCmd.MarkFlagRequired("password")
-	if err != nil {
-		log.Fatal(err)
-	}
+	archiveCmd.Flags().StringVarP(&targetInbox, "target-inbox", "r", "Inbox", "The archive mailbox name of received messages")
+	archiveCmd.Flags().StringVarP(&targetOutbox, "target-outbox", "l", "Sent", "The archive mailbox name of sent messages")
+	archiveCmd.Flags().StringVarP(&location, "location", "z", "Europe/Zurich", "The timezone to use")
+	archiveCmd.Flags().BoolVarP(&dryrun, "dryrun", "d", false, "Flag to control whether the command is just a dry run to check the outcome with verbose")
 
 	rootCmd.AddCommand(archiveCmd)
 }
 
 func cmdArchive(cmd *cobra.Command, args []string) error {
 
-	log.Println("Connecting to server...")
-
+	if verbose {
+		log.Println("Connecting to server...")
+	}
 	// Connect to server
 	addr := fmt.Sprintf("%s:%d", host, port)
 	c, err := client.DialTLS(addr, nil)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-
-	log.Println("Connected")
+	if verbose {
+		log.Println("Connected")
+	}
 
 	// Don't forget to logout
 	defer c.Logout()
 
 	// Login
 	if err := c.Login(user, password); err != nil {
-		log.Fatal(err)
+		return err
 	}
-	log.Println("Logged in")
+	if verbose {
+		log.Println("Logged in")
+	}
 
-	// List mailboxes
-	mailboxes := make(chan *imap.MailboxInfo, 10)
+	// get the current year
+	loc, _ := time.LoadLocation(location)
+	now := time.Now().In(loc)
+	//year := now.Year()
+
+	// Select INBOX
+	mbox, err := c.Select(inbox, true)
+	if err != nil {
+		return err
+	}
+
+	to := mbox.Messages
+	sequentialSet := new(imap.SeqSet)
+	sequentialSet.AddRange(1, to)
+
+	messages := make(chan *imap.Message, 10)
 	done := make(chan error, 1)
 	go func() {
-		done <- c.List("", "*", mailboxes)
+		done <- c.Fetch(sequentialSet, []imap.FetchItem{imap.FetchEnvelope, imap.FetchUid, imap.FetchInternalDate}, messages)
 	}()
 
-	//if err := c.Create("INBOX.Archiv.2023"); err != nil {
-	//	log.Fatal(err)
-	//}
+	moveMap := make(map[string]*ArchiveState)
+	limit := now.AddDate(0, -6, 0)
+	for msg := range messages {
 
-	log.Println("Mailboxes:")
-	for m := range mailboxes {
-		log.Println("* " + m.Name)
+		msgDate := msg.Envelope.Date.In(loc)
+		msgIntDate := msg.InternalDate.In(loc)
+
+		if msgIntDate.Before(limit) {
+			boxName := target + "." + strconv.Itoa(msgIntDate.Year()) + "." + targetInbox
+
+			state := moveMap[boxName]
+			if state == nil {
+				state = &ArchiveState{boxName, 0, new(imap.SeqSet)}
+				moveMap[boxName] = state
+				if verbose {
+					log.Println("Created entry for: " + boxName)
+				}
+			}
+
+			state.Seq.AddNum(msg.Uid)
+			state.Count++
+			if verbose {
+				uid := msg.Uid
+				log.Printf("Added %s '%s' (date: %s, internal: %s,  uid: %s) to %s\n", msg.SeqNum, msg.Envelope.Subject, msgDate, msgIntDate, uid, boxName)
+			}
+
+		}
 	}
 
 	if err := <-done; err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	// Select INBOX
-	mbox, err := c.Select("INBOX", false)
-	if err != nil {
-		log.Fatal(err)
+	for k, v := range moveMap {
+
+		if verbose {
+			log.Printf("%s (%d) -> %s", v.Seq, v.Count, k)
+		}
+
+		if !dryrun {
+			if err := utl.CreateDirectory(c, k); err != nil {
+				return err
+			}
+			if err := c.UidMove(v.Seq, k); err != nil {
+				return err
+			}
+		}
 	}
-	log.Println("Flags for INBOX:", mbox.Flags)
 
-	// Get the last 4 messages
-	//from := uint32(1)
-	to := mbox.Messages
-	//if mbox.Messages > 3 {
-	//	// We're using unsigned integers here, only subtract if the result is > 0
-	//	from = mbox.Messages - 3
-	//}
-	seqset := new(imap.SeqSet)
-	seqset.AddRange(1, to)
+	if verbose {
+		log.Println("Dry run!")
+	}
 
-	messages := make(chan *imap.Message, 10)
-	done = make(chan error, 1)
-	go func() {
-		done <- c.Fetch(seqset, []imap.FetchItem{imap.FetchEnvelope}, messages)
-	}()
-
-	log.Printf("messages: %d\n", mbox.Messages)
-	//for msg := range messages {
-	//log.Printf("* " + msg.Envelope.Subject + "(" + msg.Envelope.Date.String() +")")
-	// TODO: handle message -> check date - if not within the last 6 months move to year
-	// -> check existence of archive mailbox/year/inbox|outbox
-	//}
-
-	//if err := <-done; err != nil {
-	//	log.Fatal(err)
-	//}
-
-	log.Println("Done!")
 	return nil
 }
