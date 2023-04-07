@@ -26,7 +26,7 @@ type ArchiveState struct {
 
 var target string
 var inbox string
-var outbox []string
+var outbox string
 
 var targetInbox string
 var targetOutbox string
@@ -39,7 +39,7 @@ func init() {
 	archiveCmd.Flags().StringVarP(&target, "target", "t", "INBOX.Archive", "The target mailbox for the archive")
 	archiveCmd.Flags().StringVarP(&inbox, "inbox", "i", "INBOX", "The mailbox name of received messages")
 	// Instead we could scan for the '\Sent' flag
-	archiveCmd.Flags().StringSliceVarP(&outbox, "outbox", "o", []string{"INBOX.Sent"}, "The mailbox name of sent messages")
+	archiveCmd.Flags().StringVarP(&outbox, "outbox", "o", "INBOX.Sent", "The mailbox name of sent messages")
 	archiveCmd.Flags().StringVarP(&targetInbox, "target-inbox", "r", "Inbox", "The archive mailbox name of received messages")
 	archiveCmd.Flags().StringVarP(&targetOutbox, "target-outbox", "l", "Sent", "The archive mailbox name of sent messages")
 	archiveCmd.Flags().StringVarP(&location, "location", "z", "Europe/Zurich", "The timezone to use")
@@ -47,6 +47,8 @@ func init() {
 
 	rootCmd.AddCommand(archiveCmd)
 }
+
+type MailboxGenerator func(int) string
 
 func cmdArchive(cmd *cobra.Command, args []string) error {
 
@@ -79,8 +81,27 @@ func cmdArchive(cmd *cobra.Command, args []string) error {
 	now := time.Now().In(loc)
 	//year := now.Year()
 
-	// Select INBOX
-	mbox, err := c.Select(inbox, true)
+	if err := handleMailbox(c, inbox, now, loc, func(year int) string {
+		return target + "." + strconv.Itoa(year) + "." + targetInbox
+	}); err != nil {
+		return err
+	}
+
+	if err := handleMailbox(c, outbox, now, loc, func(year int) string {
+		return target + "." + strconv.Itoa(year) + "." + targetOutbox
+	}); err != nil {
+		return err
+	}
+
+	if verbose && dryrun {
+		log.Println("Dry run!")
+	}
+
+	return nil
+}
+
+func handleMailbox(c *client.Client, mailbox string, now time.Time, loc *time.Location, generator MailboxGenerator) error {
+	mbox, err := c.Select(mailbox, true)
 	if err != nil {
 		return err
 	}
@@ -103,8 +124,7 @@ func cmdArchive(cmd *cobra.Command, args []string) error {
 		msgIntDate := msg.InternalDate.In(loc)
 
 		if msgIntDate.Before(limit) {
-			boxName := target + "." + strconv.Itoa(msgIntDate.Year()) + "." + targetInbox
-
+			boxName := generator(msgIntDate.Year())
 			state := moveMap[boxName]
 			if state == nil {
 				state = &ArchiveState{boxName, 0, new(imap.SeqSet)}
@@ -143,10 +163,5 @@ func cmdArchive(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-
-	if verbose {
-		log.Println("Dry run!")
-	}
-
 	return nil
 }
