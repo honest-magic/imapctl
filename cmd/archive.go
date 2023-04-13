@@ -66,7 +66,12 @@ func cmdArchive(cmd *cobra.Command, args []string) error {
 	}
 
 	// Don't forget to logout
-	defer c.Logout()
+	defer func(c *client.Client) {
+		err := c.Logout()
+		if err != nil {
+			log.Println(err)
+		}
+	}(c)
 
 	// Login
 	if err := c.Login(user, password); err != nil {
@@ -138,7 +143,7 @@ func handleMailbox(c *client.Client, mailbox string, now time.Time, loc *time.Lo
 			state.Count++
 			if verbose {
 				uid := msg.Uid
-				log.Printf("Added %s '%s' (date: %s, internal: %s,  uid: %s) to %s\n", msg.SeqNum, msg.Envelope.Subject, msgDate, msgIntDate, uid, boxName)
+				log.Printf("Added %d '%s' (date: %s, internal: %s,  uid: %d) to %s\n", msg.SeqNum, msg.Envelope.Subject, msgDate, msgIntDate, uid, boxName)
 			}
 
 		}

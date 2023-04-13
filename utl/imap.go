@@ -16,7 +16,7 @@ func CreateDirectory(c *client.Client, name string) error {
 
 	found := false
 
-	for _ = range boxes {
+	for range boxes {
 		found = true
 	}
 

@@ -24,7 +24,14 @@ func cmdCheck(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Logout()
+
+	defer func(c *client.Client) {
+		err := c.Logout()
+		if err != nil {
+			log.Println(err)
+		}
+	}(c)
+
 	return nil
 }
 

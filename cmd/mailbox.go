@@ -41,8 +41,13 @@ func listMailboxes(cmd *cobra.Command, args []string) error {
 	if verbose {
 		log.Println("Connected")
 	}
-	// Don't forget to logout
-	defer c.Logout()
+
+	defer func(c *client.Client) {
+		err := c.Logout()
+		if err != nil {
+			log.Println(err)
+		}
+	}(c)
 
 	// Login
 	if err := c.Login(user, password); err != nil {
