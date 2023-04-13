@@ -3,7 +3,7 @@ package cmd
 import (
 	"bitbucket.org/mis79/imapctl/utl"
 	"fmt"
-	imap "github.com/emersion/go-imap"
+	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 	"github.com/spf13/cobra"
 	"log"
@@ -65,7 +65,6 @@ func cmdArchive(cmd *cobra.Command, args []string) error {
 		log.Println("Connected")
 	}
 
-	// Don't forget to logout
 	defer func(c *client.Client) {
 		err := c.Logout()
 		if err != nil {
