@@ -27,7 +27,7 @@ brews:
     homepage: "https://github.com/honest-magic/imapctl"
     tap:
       owner: honest-magic
-      name: homebrew-imapctl
+      name: homebrew-honest-magic
     commit_author:
       name: szediwy
       email: michael@szediwy.ch
