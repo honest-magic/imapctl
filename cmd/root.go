@@ -14,7 +14,7 @@ var rootCmd = &cobra.Command{
 	Use:     "imapctl",
 	Short:   "Control and manage IMAP based mailboxes",
 	Long:    "Control and manage IMAP based mailboxes",
-	Version: "0.0.1",
+	Version: "0.0.2",
 	RunE:    imapCtrl,
 }
 
