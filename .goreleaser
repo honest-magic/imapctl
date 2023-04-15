@@ -1,0 +1,36 @@
+builds:
+  - binary: imapctl
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -mod=vendor
+
+release:
+  # If set to auto, will mark the release as not ready for production
+  # in case there is an indicator for this in the tag e.g. v1.0.0-rc1
+  # If set to true, will mark the release as not ready for production.
+  # Default is false.
+  prerelease: auto
+
+universal_binaries:
+  - replace: true
+
+brews:
+  -
+    name: imapctl
+    homepage: "https://github.com/askcloudarchitech/mediumautopost"
+    tap:
+      owner: honest-magic
+      name: homebrew-imapctl
+    commit_author:
+      name: szediwy
+      email: michael@szediwy.ch
+
+checksum:
+  name_template: 'checksums.txt'
