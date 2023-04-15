@@ -8,8 +8,8 @@ builds:
       - arm64
     env:
       - CGO_ENABLED=0
-    flags:
-      - -mod=vendor
+    flags: []
+      #- -mod=vendor
 
 release:
   # If set to auto, will mark the release as not ready for production
