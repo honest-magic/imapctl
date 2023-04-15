@@ -24,7 +24,7 @@ universal_binaries:
 brews:
   -
     name: imapctl
-    homepage: "https://github.com/askcloudarchitech/mediumautopost"
+    homepage: "https://github.com/honest-magic/imapctl"
     tap:
       owner: honest-magic
       name: homebrew-imapctl
